@@ -3,6 +3,9 @@
 
 //--------------------------------------------------------------
 void ofApp::setup() {
+	ofBuffer buf = ofBufferFromFile("key.txt");
+	OPENAI_API_KEY = buf.getText();
+
 	Image i = prepareImage("a white siamese cat");
 	images.push_back(i);
 }
@@ -97,13 +100,18 @@ string ofApp::performRequest(string prompt) {
 	if (curl) {
 		slist1 = NULL;
 		slist1 = curl_slist_append(slist1, "Content-Type: application/json");
-		slist1 = curl_slist_append(slist1, "Authorization: Bearer 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");
+		std::stringstream key_ss;
+		key_ss << "Authorization: Bearer " << OPENAI_API_KEY;
+		const string key_tmp = key_ss.str();
+		const char* key = key_tmp.c_str();
+		slist1 = curl_slist_append(slist1, key);
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, slist1);
 		curl_easy_setopt(curl, CURLOPT_URL, "https://api.openai.com/v1/images/generations");
 
-		std::ostringstream ss;
-		ss << "{ \"prompt\": \"" << prompt << "\", \"n\": 1, \"size\": \"256x256\"}";
-		const string& tmp = ss.str();
+		std::stringstream post_ss;
+		post_ss.clear();
+		post_ss << "{ \"prompt\": \"" << prompt << "\", \"n\": 1, \"size\": \"256x256\"}";
+		const string& tmp = post_ss.str();
 		const char* postfields = tmp.c_str();
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ofApp::WriteCallback);

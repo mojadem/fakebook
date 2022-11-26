@@ -32,4 +32,6 @@ class ofApp : public ofBaseApp{
 		Image parseData(string data);
 		
 		std::vector<Image> images;
+
+		string OPENAI_API_KEY;
 };
