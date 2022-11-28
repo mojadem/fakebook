@@ -27,11 +27,12 @@ class ofApp : public ofBaseApp{
 			ofImage img;
 		};
 		static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp);
-		Image prepareImage(string prompt);
-		string performRequest(string prompt);
-		Image parseData(string data);
+		Image prepareImage();
+		vector<string> getKeywords();
+		Image getImage(vector<string>& keywords);
 		
-		std::vector<Image> images;
+		vector<Image> images;
+		Image curImg;
 
 		string OPENAI_API_KEY;
 };
