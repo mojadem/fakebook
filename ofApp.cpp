@@ -6,9 +6,8 @@
 #include <boost/algorithm/string/split.hpp> // for boost::split
 
 /*
-TODO: change multithreading to use future / async
-hold a queue of futures that are initialized, check if valid before drawing, create new futures as more calls are needed
-look into launch async vs launch deferred to allow thread pooling (launch::async | launch::deferred)
+TODO: app is working as intended, random error that occurs while scrolling
+implement ofLog in place of std::cout logging
 */
 
 constexpr auto NUM_T = 3;
@@ -235,5 +234,5 @@ void ofApp::loadImage(Image& img) {
 	ofBuffer buf(readBuffer.c_str(), readBuffer.size());
 	ofLoadImage(img.imgData, buf);
 
-	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.url << " on thread " << std::this_thread::get_id() << std::endl;
+	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
 }
