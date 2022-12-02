@@ -1,7 +1,6 @@
 #include "ofApp.h"
 
 #include <curl/curl.h>
-#include <thread>
 
 #include <boost/algorithm/string/classification.hpp> // for boost::is_any_of
 #include <boost/algorithm/string/split.hpp> // for boost::split
@@ -13,6 +12,7 @@ look into launch async vs launch deferred to allow thread pooling (launch::async
 */
 
 constexpr auto NUM_T = 3;
+string ofApp::OPENAI_API_KEY;
 
 void first(int id) { 
 	std::cout << "hello from " << id << '\n';
@@ -22,18 +22,26 @@ void ofApp::setup() {
 	curl_global_init(CURL_GLOBAL_ALL);
 	
 	ofBuffer buf = ofBufferFromFile("key.txt");
-	OPENAI_API_KEY = buf.getText();
+	ofApp::OPENAI_API_KEY = buf.getText();
 
 	loadingImg.load("loading.jpg");
 	loadingImg.resize(ofGetWidth(), ofGetWidth());
+	curImg = loadingImg;
 
-	Image i = prepareImage();
-	curImg.load(i.imgData);
-	curImg.resize(ofGetWidth(), ofGetWidth());
+	for (int i = 0; i < NUM_T; i++) {
+		images.emplace_back(std::async(std::launch::async, prepareImage));
+	}
+
+	loaded = false;
 }
 
 void ofApp::update() {
-
+	/*if (!loaded) {
+		Image i = images.front().get();
+		curImg.getPixelsRef() = i.imgData;
+		curImg.update();
+		loaded = true;
+	}*/
 }
 
 void ofApp::exit() {
@@ -41,13 +49,27 @@ void ofApp::exit() {
 }
 
 void ofApp::draw() {
-	curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2);
+	if (!loaded) {
+		cout << "before" << endl;
+		Image i = images.front().get();
+		cout << "after" << endl;
+		curImg.getPixels() = i.imgData;
+		curImg.update();
+		loaded = true;
+	}
+	curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
+	/*if (curImg.isAllocated()) {
+		curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
+	}
+	else {
+		std::cout << "DRAWING UNALLOCATED IMAGE" << std::endl;
+	}*/
 }
 
 void ofApp::keyPressed(int key) {
-	Image i = prepareImage();
-	curImg.load(i.imgData);
-	curImg.resize(ofGetWidth(), ofGetWidth());
+	images.emplace_back(std::async(std::launch::async, prepareImage));
+	images.pop_front();
+	loaded = false;
 }
 
 void ofApp::keyReleased(int key) {
@@ -99,21 +121,22 @@ size_t ofApp::WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 
 ofApp::Image ofApp::prepareImage() {
 	std::cout << "Image prepare started on thread " << std::this_thread::get_id() << std::endl;
-	vector<string> keywords = getKeywords();
-	Image i = getImage(keywords);
+	Image img;
+	getKeywords(img);
+	generateImage(img);
+	loadImage(img);
 	std::cout << "Image prepare finished on thread " << std::this_thread::get_id() << std::endl;
-	return i;
+	return img;
 }
 
-vector<string> ofApp::getKeywords() {
-	// Load keywords
+void ofApp::getKeywords(Image &img) {
 	CURL* curl;
 	CURLcode res;
 	string readBuffer;
 
 	curl = curl_easy_init();
 	if (curl) {
-		curl_easy_setopt(curl, CURLOPT_URL, "https://random-word-api.herokuapp.com/word?number=5");
+		curl_easy_setopt(curl, CURLOPT_URL, "https://random-word-form.herokuapp.com/random/noun?count=5");
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -126,23 +149,18 @@ vector<string> ofApp::getKeywords() {
 		curl_easy_cleanup(curl);
 	}
 
-	// Parse data
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), '['), readBuffer.cend());
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), ']'), readBuffer.cend());
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), '"'), readBuffer.cend());
 	
-	vector<string> keywords;
-	boost::split(keywords, readBuffer, boost::is_any_of(", "), boost::token_compress_on);
+	boost::split(img.keywords, readBuffer, boost::is_any_of(", "), boost::token_compress_on);
 	
 	std::cout << "KEYWORDS REQUEST COMPLETE: ";
-	for (auto& s : keywords) std::cout << s << " ";
+	for (auto& s : img.keywords) std::cout << s << " ";
 	std::cout << "on thread " << std::this_thread::get_id() << std::endl;
-	
-	return keywords;
 }
 
-ofApp::Image ofApp::getImage(vector<string>& keywords) {
-	// Load image
+void ofApp::generateImage(Image &img) {
 	CURL* curl;
 	CURLcode res;
 	struct curl_slist* slist1;
@@ -153,7 +171,7 @@ ofApp::Image ofApp::getImage(vector<string>& keywords) {
 		slist1 = NULL;
 		slist1 = curl_slist_append(slist1, "Content-Type: application/json");
 		std::stringstream key_ss;
-		key_ss << "Authorization: Bearer " << OPENAI_API_KEY;
+		key_ss << "Authorization: Bearer " << ofApp::OPENAI_API_KEY;
 		const string key_tmp = key_ss.str();
 		const char* key = key_tmp.c_str();
 		slist1 = curl_slist_append(slist1, key);
@@ -162,7 +180,7 @@ ofApp::Image ofApp::getImage(vector<string>& keywords) {
 		std::stringstream post_ss;
 		post_ss.clear();
 		post_ss << "{ \"prompt\": \"";
-		for (auto& s : keywords) post_ss << s << " ";
+		for (auto& s : img.keywords) post_ss << s << " ";
 		post_ss << "\", \"n\": 1, \"size\": \"256x256\"}";
 		const string& tmp = post_ss.str();
 		const char* postfields = tmp.c_str();
@@ -173,30 +191,50 @@ ofApp::Image ofApp::getImage(vector<string>& keywords) {
 
 		res = curl_easy_perform(curl);
 		if (res != CURLE_OK) {
-			std::cout << "IMAGE REQUEST ERROR " << (int)res << " on thread " << std::this_thread::get_id() << std::endl;
+			std::cout << "GENERATE IMAGE REQUEST ERROR " << (int)res << " on thread " << std::this_thread::get_id() << std::endl;
 		}
 
 		curl_easy_cleanup(curl);
 	}
 
-	// Parse data
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), '\n'), readBuffer.cend());
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), ' '), readBuffer.cend());
 
 	string idSearch = string("\"created\":");
 	size_t idStart = readBuffer.find(idSearch) + idSearch.length();
 	size_t idEnd = readBuffer.find(",", idStart);
-	int id = std::stoi(readBuffer.substr(idStart, idEnd - idStart));
+	img.id = std::stoi(readBuffer.substr(idStart, idEnd - idStart));
 
 	string urlSearch = string("\"url\":\"");
 	size_t urlStart = readBuffer.find(urlSearch) + urlSearch.length();
 	size_t urlEnd = readBuffer.find("}", urlStart);
-	string url = readBuffer.substr(urlStart, urlEnd - urlStart - 1); // -1 for ending quotation
+	img.url = readBuffer.substr(urlStart, urlEnd - urlStart - 1); // -1 for ending quotation
 
-	ofHttpResponse r = ofLoadURL(url);
-	ofBuffer imgData = r.data;
+	std::cout << "GENERATE IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
+}
 
-	std::cout << "IMAGE REQUEST COMPLETE: " << id << " on thread " << std::this_thread::get_id() << std::endl;
+void ofApp::loadImage(Image& img) {
+	CURL* curl;
+	CURLcode res;
+	string readBuffer;
 
-	return Image{ id, url, imgData };
+	curl = curl_easy_init();
+	if (curl) {
+		curl_easy_setopt(curl, CURLOPT_URL, img.url.c_str());
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+
+		res = curl_easy_perform(curl);
+		if (res != CURLE_OK) {
+			std::cout << "LOAD IMAGE REQUEST ERROR " << (int)res << " on thread " << std::this_thread::get_id() << std::endl;
+		}
+
+		curl_easy_cleanup(curl);
+	}
+
+	ofBuffer buf(readBuffer.c_str(), readBuffer.size());
+	ofLoadImage(img.imgData, readBuffer);
+
+	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
 }
