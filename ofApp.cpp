@@ -50,9 +50,8 @@ void ofApp::exit() {
 
 void ofApp::draw() {
 	if (!loaded) {
-		cout << "before" << endl;
 		Image i = images.front().get();
-		cout << "after" << endl;
+		curImg.clear();
 		curImg.getPixels() = i.imgData;
 		curImg.update();
 		loaded = true;
@@ -234,7 +233,7 @@ void ofApp::loadImage(Image& img) {
 	}
 
 	ofBuffer buf(readBuffer.c_str(), readBuffer.size());
-	ofLoadImage(img.imgData, readBuffer);
+	ofLoadImage(img.imgData, buf);
 
-	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
+	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.url << " on thread " << std::this_thread::get_id() << std::endl;
 }
