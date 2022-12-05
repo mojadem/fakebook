@@ -23,7 +23,6 @@ class ofApp : public ofBaseApp{
 		void windowResized(int w, int h);
 		void dragEvent(ofDragInfo dragInfo);
 		void gotMessage(ofMessage msg);
-		
 
 		struct Image {
 			vector<string> keywords;
@@ -43,6 +42,17 @@ class ofApp : public ofBaseApp{
 		int loadingImgWidth;
 		ofImage curImg;
 		ofImage nextImg;
+		string curKeywords;
+		string nextKeywords;
 		bool curLoaded;
 		bool nextLoaded;
+		
+		ofColor white;
+		ofColor bgColor;
+		ofColor headerColor;
+		ofColor fontColor;
+		ofRectangle bgRect;
+		ofRectangle headerRect;
+		ofTrueTypeFont boldFont;
+		ofTrueTypeFont regularFont;
 };

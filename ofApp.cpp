@@ -24,6 +24,17 @@ void ofApp::setup() {
 
 	curLoaded = false;
 	nextLoaded = false;
+
+	white.set(255);
+	bgColor.setHex(0x070d23);
+	headerColor.setHex(0x18233d);
+	fontColor.setHex(0xfcd2ae);
+
+	bgRect.set(0, 0, ofGetWidth(), ofGetHeight());
+	headerRect.set(0, 0, ofGetWidth(), ofGetHeight() / 12);
+
+	boldFont.load("SourceCodePro-Bold.ttf", ofGetWidth() / 15);
+	regularFont.load("SourceCodePro-Regular.ttf", ofGetWidth() / 30);
 }
 
 void ofApp::exit() {
@@ -32,26 +43,57 @@ void ofApp::exit() {
 
 
 void ofApp::update() {
-	if (images.front().valid() && images.front()._Is_ready() && !curLoaded) {
-		Image i = images.front().get();
-		curImg.clear();
-		curImg.getPixels() = i.imgData;
-		curImg.update();
-		curLoaded = true;
+	try {
+		if (images.front().valid() && images.front()._Is_ready() && !curLoaded) {
+			Image i = images.front().get();
+			curImg.clear();
+			curImg.getPixels() = i.imgData;
+			curImg.update();
+			curKeywords.clear();
+			for (auto& s : i.keywords) {
+				curKeywords.append(s);
+				curKeywords.append("\n");
+			}
+			curLoaded = true;
+		}
+	}
+	catch (const std::exception& e) {
+		std::cout << "ERROR IN LOAD CURRENT: " << e.what() << std::endl;
+		images.emplace_back(std::async(std::launch::async, prepareImage));
+		images.pop_front();
 	}
 
-	if (images[1].valid() && images[1]._Is_ready() && !nextLoaded) {
-		Image i = images[1].get();
-		nextImg.clear();
-		nextImg.getPixels() = i.imgData;
-		nextImg.update();
-		nextLoaded = true;
+	try {
+		if (images[1].valid() && images[1]._Is_ready() && !nextLoaded) {
+			Image i = images[1].get();
+			nextImg.clear();
+			nextImg.getPixels() = i.imgData;
+			nextImg.update();
+			nextKeywords.clear();
+			for (auto& s : i.keywords) {
+				nextKeywords.append(s);
+				nextKeywords.append("\n");
+			}
+			nextLoaded = true;
+		}
 	}
+	catch (const std::exception& e) {
+		std::cout << "ERROR IN LOAD NEXT: " << e.what() << std::endl;
+		images.emplace_back(std::async(std::launch::async, prepareImage));
+		images.erase(images.begin() + 1);
+	}
+	
 }
 
 void ofApp::draw() {
+	ofSetColor(bgColor);
+	ofDrawRectangle(bgRect);
+	
+	ofSetColor(white);
 	if (curLoaded) {
 		curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
+		ofSetColor(fontColor);
+		regularFont.drawString(curKeywords, ofGetWidth() / 22, ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
 	}
 	else {
 		ofPushMatrix();
@@ -61,8 +103,11 @@ void ofApp::draw() {
 		ofPopMatrix();
 	}
 
+	ofSetColor(white);
 	if (nextLoaded) {
 		nextImg.draw(0, ofGetHeight() + ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
+		ofSetColor(fontColor);
+		regularFont.drawString(nextKeywords, ofGetWidth() / 22, ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
 	}
 	else {
 		ofPushMatrix();
@@ -71,6 +116,11 @@ void ofApp::draw() {
 		loadingImg.draw(-loadingImgWidth / 2, -loadingImgWidth / 2);
 		ofPopMatrix();
 	}
+
+	ofSetColor(headerColor);
+	ofDrawRectangle(headerRect);
+	ofSetColor(fontColor);
+	boldFont.drawString("fakebook", ofGetWidth() / 22, ofGetHeight() / 12 - ofGetWidth() / 22);
 }
 
 void ofApp::keyPressed(int key) {
@@ -79,6 +129,7 @@ void ofApp::keyPressed(int key) {
 		images.pop_front();
 		curImg = nextImg;
 		curLoaded = nextLoaded;
+		curKeywords = nextKeywords;
 		nextLoaded = false;
 	}
 }
@@ -147,7 +198,7 @@ void ofApp::getKeywords(Image &img) {
 
 	curl = curl_easy_init();
 	if (curl) {
-		curl_easy_setopt(curl, CURLOPT_URL, "https://random-word-form.herokuapp.com/random/noun?count=5");
+		curl_easy_setopt(curl, CURLOPT_URL, "https://random-word-api.herokuapp.com/word?number=5");
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -166,9 +217,9 @@ void ofApp::getKeywords(Image &img) {
 	
 	boost::split(img.keywords, readBuffer, boost::is_any_of(", "), boost::token_compress_on);
 	
-	std::cout << "KEYWORDS REQUEST COMPLETE: ";
+	/*std::cout << "KEYWORDS REQUEST COMPLETE: ";
 	for (auto& s : img.keywords) std::cout << s << " ";
-	std::cout << "on thread " << std::this_thread::get_id() << std::endl;
+	std::cout << "on thread " << std::this_thread::get_id() << std::endl;*/
 }
 
 void ofApp::generateImage(Image &img) {
@@ -221,7 +272,7 @@ void ofApp::generateImage(Image &img) {
 	size_t urlEnd = readBuffer.find("}", urlStart);
 	img.url = readBuffer.substr(urlStart, urlEnd - urlStart - 1); // -1 for ending quotation
 
-	std::cout << "GENERATE IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
+	//std::cout << "GENERATE IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
 }
 
 void ofApp::loadImage(Image& img) {
@@ -247,5 +298,5 @@ void ofApp::loadImage(Image& img) {
 	ofBuffer buf(readBuffer.c_str(), readBuffer.size());
 	ofLoadImage(img.imgData, buf);
 
-	std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
+	//std::cout << "LOAD IMAGE REQUEST COMPLETE: " << img.id << " on thread " << std::this_thread::get_id() << std::endl;
 }
