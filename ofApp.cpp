@@ -5,17 +5,8 @@
 #include <boost/algorithm/string/classification.hpp> // for boost::is_any_of
 #include <boost/algorithm/string/split.hpp> // for boost::split
 
-/*
-TODO: app is working as intended, random error that occurs while scrolling
-implement ofLog in place of std::cout logging
-*/
-
 constexpr auto NUM_T = 3;
 string ofApp::OPENAI_API_KEY;
-
-void first(int id) { 
-	std::cout << "hello from " << id << '\n';
-}
 
 void ofApp::setup() {
 	curl_global_init(CURL_GLOBAL_ALL);
@@ -23,51 +14,73 @@ void ofApp::setup() {
 	ofBuffer buf = ofBufferFromFile("key.txt");
 	ofApp::OPENAI_API_KEY = buf.getText();
 
-	loadingImg.load("loading.jpg");
-	loadingImg.resize(ofGetWidth(), ofGetWidth());
-	curImg = loadingImg;
+	loadingImg.load("loadingImg.png");
+	loadingImgWidth = ofGetWidth() / 4;
+	loadingImg.resize(loadingImgWidth, loadingImgWidth);
 
 	for (int i = 0; i < NUM_T; i++) {
 		images.emplace_back(std::async(std::launch::async, prepareImage));
 	}
 
-	loaded = false;
-}
-
-void ofApp::update() {
-	/*if (!loaded) {
-		Image i = images.front().get();
-		curImg.getPixelsRef() = i.imgData;
-		curImg.update();
-		loaded = true;
-	}*/
+	curLoaded = false;
+	nextLoaded = false;
 }
 
 void ofApp::exit() {
 	curl_global_cleanup();
 }
 
-void ofApp::draw() {
-	if (!loaded) {
+
+void ofApp::update() {
+	if (images.front().valid() && images.front()._Is_ready() && !curLoaded) {
 		Image i = images.front().get();
 		curImg.clear();
 		curImg.getPixels() = i.imgData;
 		curImg.update();
-		loaded = true;
+		curLoaded = true;
 	}
-	curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
-	/*if (curImg.isAllocated()) {
+
+	if (images[1].valid() && images[1]._Is_ready() && !nextLoaded) {
+		Image i = images[1].get();
+		nextImg.clear();
+		nextImg.getPixels() = i.imgData;
+		nextImg.update();
+		nextLoaded = true;
+	}
+}
+
+void ofApp::draw() {
+	if (curLoaded) {
 		curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
 	}
 	else {
-		std::cout << "DRAWING UNALLOCATED IMAGE" << std::endl;
-	}*/
+		ofPushMatrix();
+		ofTranslate(ofGetWidth() / 2, ofGetHeight() / 2);
+		ofRotateDeg(ofGetElapsedTimeMillis() % 360);
+		loadingImg.draw(-loadingImgWidth / 2, -loadingImgWidth / 2);
+		ofPopMatrix();
+	}
+
+	if (nextLoaded) {
+		nextImg.draw(0, ofGetHeight() + ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
+	}
+	else {
+		ofPushMatrix();
+		ofTranslate(ofGetWidth() / 2, ofGetHeight() + ofGetHeight() / 2);
+		ofRotateDeg(ofGetElapsedTimeMillis() % 360);
+		loadingImg.draw(-loadingImgWidth / 2, -loadingImgWidth / 2);
+		ofPopMatrix();
+	}
 }
 
 void ofApp::keyPressed(int key) {
-	images.emplace_back(std::async(std::launch::async, prepareImage));
-	images.pop_front();
-	loaded = false;
+	if (curLoaded) {
+		images.emplace_back(std::async(std::launch::async, prepareImage));
+		images.pop_front();
+		curImg = nextImg;
+		curLoaded = nextLoaded;
+		nextLoaded = false;
+	}
 }
 
 void ofApp::keyReleased(int key) {

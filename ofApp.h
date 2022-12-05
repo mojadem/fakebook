@@ -39,7 +39,10 @@ class ofApp : public ofBaseApp{
 		static void loadImage(Image& img);
 
 		deque<std::future<Image>> images;
-		ofImage curImg;
 		ofImage loadingImg;
-		bool loaded;
+		int loadingImgWidth;
+		ofImage curImg;
+		ofImage nextImg;
+		bool curLoaded;
+		bool nextLoaded;
 };
