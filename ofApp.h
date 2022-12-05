@@ -36,16 +36,26 @@ class ofApp : public ofBaseApp{
 		static void getKeywords(Image &img);
 		static void generateImage(Image &img);
 		static void loadImage(Image& img);
+		static vector<string> likedKeywords;
 
 		deque<std::future<Image>> images;
 		ofImage loadingImg;
 		int loadingImgWidth;
 		ofImage curImg;
 		ofImage nextImg;
-		string curKeywords;
-		string nextKeywords;
+		vector<string> curKeywordsVec;
+		vector<string> nextKeywordsVec;
+		string curKeywordsStr;
+		string nextKeywordsStr;
 		bool curLoaded;
 		bool nextLoaded;
+
+		int fps;
+		bool moving;
+		float animFrame;
+		float animDuration;
+		float animStep;
+		float easeOutQuint(float x);
 		
 		ofColor white;
 		ofColor bgColor;

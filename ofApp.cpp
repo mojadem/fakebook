@@ -2,11 +2,18 @@
 
 #include <curl/curl.h>
 
+#include <algorithm>
+#include <random>
+
 #include <boost/algorithm/string/classification.hpp> // for boost::is_any_of
 #include <boost/algorithm/string/split.hpp> // for boost::split
 
-constexpr auto NUM_T = 3;
+constexpr auto NUM_T = 10;
+auto rng = std::default_random_engine{};
+
 string ofApp::OPENAI_API_KEY;
+vector<string> ofApp::likedKeywords;
+
 
 void ofApp::setup() {
 	curl_global_init(CURL_GLOBAL_ALL);
@@ -35,6 +42,13 @@ void ofApp::setup() {
 
 	boldFont.load("SourceCodePro-Bold.ttf", ofGetWidth() / 15);
 	regularFont.load("SourceCodePro-Regular.ttf", ofGetWidth() / 30);
+
+	fps = 60;
+	ofSetFrameRate(fps);
+	moving = false;
+	animFrame = 0.0f;
+	animDuration = 1.0f;
+	animStep = 1 / (fps * animDuration);
 }
 
 void ofApp::exit() {
@@ -49,12 +63,14 @@ void ofApp::update() {
 			curImg.clear();
 			curImg.getPixels() = i.imgData;
 			curImg.update();
-			curKeywords.clear();
+			curKeywordsStr.clear();
+			curKeywordsVec = i.keywords;
 			for (auto& s : i.keywords) {
-				curKeywords.append(s);
-				curKeywords.append("\n");
+				curKeywordsStr.append(s);
+				curKeywordsStr.append("\n");
 			}
 			curLoaded = true;
+			ofResetElapsedTimeCounter();
 		}
 	}
 	catch (const std::exception& e) {
@@ -69,10 +85,11 @@ void ofApp::update() {
 			nextImg.clear();
 			nextImg.getPixels() = i.imgData;
 			nextImg.update();
-			nextKeywords.clear();
+			nextKeywordsVec = i.keywords;
+			nextKeywordsStr.clear();
 			for (auto& s : i.keywords) {
-				nextKeywords.append(s);
-				nextKeywords.append("\n");
+				nextKeywordsStr.append(s);
+				nextKeywordsStr.append("\n");
 			}
 			nextLoaded = true;
 		}
@@ -88,12 +105,36 @@ void ofApp::update() {
 void ofApp::draw() {
 	ofSetColor(bgColor);
 	ofDrawRectangle(bgRect);
+
+	if (animFrame > 1.0) {
+		moving = false;
+		animFrame = 0.0;
+
+		for (int i = 0; i < (int)ofGetElapsedTimef() - 3; i++) {
+			ofApp::likedKeywords.insert(ofApp::likedKeywords.end(), curKeywordsVec.begin(), curKeywordsVec.end());
+		}
+		std::shuffle(std::begin(ofApp::likedKeywords), std::end(ofApp::likedKeywords), rng);
+
+		images.pop_front();
+		curImg = nextImg;
+		curLoaded = nextLoaded;
+		curKeywordsVec = nextKeywordsVec;
+		curKeywordsStr = nextKeywordsStr;
+		nextLoaded = false;
+		ofResetElapsedTimeCounter();
+	}
+
+	ofPushMatrix();
+	if (moving) {
+		animFrame += animStep;
+		ofTranslate(0, -easeOutQuint(animFrame) * ofGetHeight());
+	}
 	
 	ofSetColor(white);
 	if (curLoaded) {
 		curImg.draw(0, ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
 		ofSetColor(fontColor);
-		regularFont.drawString(curKeywords, ofGetWidth() / 22, ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
+		regularFont.drawString(curKeywordsStr, ofGetWidth() / 22, ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
 	}
 	else {
 		ofPushMatrix();
@@ -107,7 +148,7 @@ void ofApp::draw() {
 	if (nextLoaded) {
 		nextImg.draw(0, ofGetHeight() + ofGetHeight() / 2 - ofGetWidth() / 2, ofGetWidth(), ofGetWidth());
 		ofSetColor(fontColor);
-		regularFont.drawString(nextKeywords, ofGetWidth() / 22, ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
+		regularFont.drawString(nextKeywordsStr, ofGetWidth() / 22, ofGetHeight() + ofGetHeight() / 2 + ofGetWidth() / 2 + ofGetWidth() / 15);
 	}
 	else {
 		ofPushMatrix();
@@ -116,21 +157,23 @@ void ofApp::draw() {
 		loadingImg.draw(-loadingImgWidth / 2, -loadingImgWidth / 2);
 		ofPopMatrix();
 	}
+	ofPopMatrix();
 
 	ofSetColor(headerColor);
 	ofDrawRectangle(headerRect);
 	ofSetColor(fontColor);
 	boldFont.drawString("fakebook", ofGetWidth() / 22, ofGetHeight() / 12 - ofGetWidth() / 22);
+
+}
+
+float ofApp::easeOutQuint(float x) {
+	return 1 - pow(1 - x, 5);
 }
 
 void ofApp::keyPressed(int key) {
-	if (curLoaded) {
+	if (curLoaded && !moving) {
+		moving = true;
 		images.emplace_back(std::async(std::launch::async, prepareImage));
-		images.pop_front();
-		curImg = nextImg;
-		curLoaded = nextLoaded;
-		curKeywords = nextKeywords;
-		nextLoaded = false;
 	}
 }
 
@@ -216,6 +259,14 @@ void ofApp::getKeywords(Image &img) {
 	readBuffer.erase(std::remove(readBuffer.begin(), readBuffer.end(), '"'), readBuffer.cend());
 	
 	boost::split(img.keywords, readBuffer, boost::is_any_of(", "), boost::token_compress_on);
+
+	if (ofApp::likedKeywords.size() < 5) {
+		return;
+	}
+
+	for (int i = 0; i < std::rand() % 5; i++) {
+		img.keywords[i] = ofApp::likedKeywords[i];
+	}
 	
 	/*std::cout << "KEYWORDS REQUEST COMPLETE: ";
 	for (auto& s : img.keywords) std::cout << s << " ";
@@ -243,7 +294,7 @@ void ofApp::generateImage(Image &img) {
 		post_ss.clear();
 		post_ss << "{ \"prompt\": \"";
 		for (auto& s : img.keywords) post_ss << s << " ";
-		post_ss << "\", \"n\": 1, \"size\": \"256x256\"}";
+		post_ss << "\", \"n\": 1, \"size\": \"512x512\"}";
 		const string& tmp = post_ss.str();
 		const char* postfields = tmp.c_str();
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
