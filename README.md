@@ -20,7 +20,13 @@ We then built a mobile app around this that mimicked many features of social med
 
 Building this project with openFrameworks, which is a rather antiquated but capable framework, presented quite a few challenges, the main one being API requests. Coming from Python, I had plenty of experience executing HTTP requests through the [requests](https://pypi.org/project/requests/) Python package, which is very easy to use and elegant. C++ has alternatives to this, such as [cpr](https://github.com/libcpr/cpr); however, I ran into issues trying to integrate this package, along with many other modern C++ libraries, into an openFrameworks project.
 
-Because of this, I was forced to execute API requests directly through the [libcurl](https://curl.se/libcurl/) C library. This exposed me to many parts of HTTP requests that were previously hidden from me, and in the end I gained a much better understanding of the process than I had before.
+Because of this, I was forced to execute API requests directly through the [libcurl](https://curl.se/libcurl/) C library. This exposed me to many parts of HTTP requests that were previously hidden from me, and in the end I gained a much better understanding of the process than I had before. I also was forced to engineer my own multithreading solution to make these calls asynchronous; after looking into a variety of options, I decided to leverage [C++ futures](https://cplusplus.com/reference/future/future/) for this, essentially creating an array of futures that would load the next images in the background, allowing the UI to remain responsive and fluid.
+
+Although this project was not completed using the most relevant tech stack, I learned a lot from the implementation, and vastly improved not only my C++ skills, but my knowledge of HTTP requests and multithreading as well.
+
+## Reflection
+
+Upon completion, I found this project to be very compelling. Scrolling was addictive, as you never knew what kind of image the algorithm would generate next. I do believe there is a future for applications like this; unfortunately, the costs of the image generation API prevented me from pursuing the idea any further. Maybe someday I'll revisit this idea given a more economic way to generate artificial content.
 
 ## Credits
 
